@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import { Plus, Upload, Sun, Moon } from "lucide-react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { Plus, Upload, Sun, Moon, LogOut } from "lucide-react";
 import { ThemeCtx } from "./ThemeProvider";
 import { Btn } from "./ui";
+import { useAuth } from "./AuthProvider";
+import LoginScreen from "./LoginScreen";
 import AddEntryModal from "./modals/AddEntryModal";
 import ImportModal from "./modals/ImportModal";
 import DashboardPage from "./pages/DashboardPage";
@@ -16,22 +18,52 @@ import DocumentsPage from "./pages/DocumentsPage";
 import RulesPage from "./pages/RulesPage";
 import SettingsPage from "./pages/SettingsPage";
 import { LIGHT, DARK, TABS, SUB_HINTS, BILL_HINTS } from "@/app/lib/constants";
-import { loadK, saveK, defSettings, listKeys, deleteK } from "@/app/lib/storage";
+import { loadK, saveK, defSettings } from "@/app/lib/storage";
 import { uuid, fp, isoNow, normMerch, inPeriod } from "@/app/lib/helpers";
+import * as db from "@/app/lib/db";
 import type { Transaction, TagItem, Rule, DocumentMeta, Settings, DetectedPattern, ImportResult, ToastData } from "@/app/lib/types";
 
 export default function Ledgerly() {
+  const { user, loading: authLoading, signOut } = useAuth();
+
   const [tab, setTab] = useState("dashboard");
-  const [transactions, setTransactions] = useState<Transaction[]>(() => loadK("ledgerly:transactions", []));
-  const [tags, setTags] = useState<TagItem[]>(() => loadK("ledgerly:tags", []));
-  const [rules, setRules] = useState<Rule[]>(() => loadK("ledgerly:rules", []));
-  const [documents, setDocuments] = useState<DocumentMeta[]>(() => loadK("ledgerly:documents", []));
-  const [settings, setSettings] = useState<Settings>(() => loadK<Settings | null>("ledgerly:settings", null) || defSettings());
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [tags, setTags] = useState<TagItem[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [documents, setDocuments] = useState<DocumentMeta[]>([]);
+  const [settings, setSettings] = useState<Settings>(defSettings());
   const [addModal, setAddModal] = useState(false);
   const [importModal, setImportModal] = useState(false);
   const [toast, setToast] = useState<ToastData | null>(null);
   const [dark, setDark] = useState(() => loadK("ledgerly:darkmode", true));
+  const [dataLoaded, setDataLoaded] = useState(false);
   const t = dark ? DARK : LIGHT;
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [txs, tgs, rls, docs, sett] = await Promise.all([
+          db.fetchTransactions(),
+          db.fetchTags(),
+          db.fetchRules(),
+          db.fetchDocuments(),
+          db.fetchSettings(),
+        ]);
+        if (cancelled) return;
+        setTransactions(txs);
+        setTags(tgs);
+        setRules(rls);
+        setDocuments(docs);
+        setSettings(sett);
+      } catch (err) {
+        console.error("Failed to load data:", err);
+      }
+      setDataLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type }); setTimeout(() => setToast(null), 3000);
@@ -41,20 +73,29 @@ export default function Ledgerly() {
     const nd = !dark; setDark(nd); saveK("ledgerly:darkmode", nd);
   }, [dark]);
 
-  const saveTx = useCallback(async (tx: Transaction[]) => { setTransactions(tx); saveK("ledgerly:transactions", tx); }, []);
-  const saveTags = useCallback(async (tg: TagItem[]) => { setTags(tg); saveK("ledgerly:tags", tg); }, []);
-  const saveRules = useCallback(async (rl: Rule[]) => { setRules(rl); saveK("ledgerly:rules", rl); }, []);
-  const saveDocs = useCallback(async (d: DocumentMeta[]) => { setDocuments(d); saveK("ledgerly:documents", d); }, []);
-  const saveSettings = useCallback(async (s: Settings) => { setSettings(s); saveK("ledgerly:settings", s); }, []);
+  const saveTx = useCallback(async (tx: Transaction[]) => { setTransactions(tx); }, []);
+  const saveTags = useCallback(async (tg: TagItem[]) => {
+    setTags(tg);
+    try { await db.saveTags(tg); } catch (e) { console.error(e); }
+  }, []);
+  const saveRules = useCallback(async (rl: Rule[]) => {
+    setRules(rl);
+    try { await db.saveRules(rl); } catch (e) { console.error(e); }
+  }, []);
+  const saveDocs = useCallback(async (d: DocumentMeta[]) => {
+    setDocuments(d);
+    try { await db.saveDocuments(d); } catch (e) { console.error(e); }
+  }, []);
+  const saveSettings = useCallback(async (s: Settings) => {
+    setSettings(s);
+    try { await db.saveSettings(s); } catch (e) { console.error(e); }
+  }, []);
 
   const period = settings.selectedPeriod || "all-time";
   const setPeriod = useCallback(async (p: string) => {
     const ns = { ...settings, selectedPeriod: p };
     setSettings(ns);
-    if (!saveK("ledgerly:settings", ns)) {
-      setSettings((s) => ({ ...s, selectedPeriod: settings.selectedPeriod }));
-      showToast("Failed to save period", "error");
-    }
+    try { await db.saveSettings(ns); } catch { showToast("Failed to save period", "error"); }
   }, [settings, showToast]);
 
   const filteredByPeriod = useMemo(() => transactions.filter((tx) => inPeriod(tx.date, period)), [transactions, period]);
@@ -73,12 +114,21 @@ export default function Ledgerly() {
       if (!r.enabled) continue;
       if (normMerch(entry.merchant).includes(normMerch(r.whenText))) entry.category = r.thenText;
     }
-    await saveTx([entry, ...transactions]); showToast("Transaction added"); return true;
-  }, [transactions, rules, saveTx, showToast]);
+    try {
+      const saved = await db.insertTransaction(entry);
+      setTransactions((prev) => [saved, ...prev]);
+      showToast("Transaction added");
+      return true;
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to save transaction", "error");
+      return false;
+    }
+  }, [transactions, rules, showToast]);
 
   const importCSV = useCallback(async (rows: Record<string, unknown>[], bank: string): Promise<ImportResult> => {
     let ins = 0, dup = 0, skip = 0;
-    const ntx = [...transactions];
+    const toInsert: Transaction[] = [];
     for (const row of rows) {
       const r = row as { merchant?: string; date?: string; amount?: number; type?: string; category?: string; account?: string; bank?: string };
       if (!r.merchant || !r.date || isNaN(r.amount!) || r.amount! <= 0) { skip++; continue; }
@@ -89,16 +139,26 @@ export default function Ledgerly() {
         tags: [], receipt: false, source: "csv", createdAt: isoNow(), fingerprint: "",
       };
       entry.fingerprint = fp(entry);
-      if (ntx.some((x) => x.fingerprint === entry.fingerprint)) { dup++; continue; }
+      if (transactions.some((x) => x.fingerprint === entry.fingerprint)) { dup++; continue; }
+      if (toInsert.some((x) => x.fingerprint === entry.fingerprint)) { dup++; continue; }
       for (const rule of rules) {
         if (!rule.enabled) continue;
         if (normMerch(entry.merchant).includes(normMerch(rule.whenText))) entry.category = rule.thenText;
       }
-      ntx.unshift(entry); ins++;
+      toInsert.push(entry); ins++;
     }
-    await saveTx(ntx);
+    if (toInsert.length > 0) {
+      try {
+        await db.upsertTransactions(toInsert);
+        setTransactions((prev) => [...toInsert, ...prev]);
+      } catch (e) {
+        console.error(e);
+        showToast("Import failed", "error");
+        return { inserted: 0, dupes: dup, skipped: skip };
+      }
+    }
     return { inserted: ins, dupes: dup, skipped: skip };
-  }, [transactions, rules, saveTx]);
+  }, [transactions, rules, showToast]);
 
   const processDriveImport = useCallback(async (payload: string): Promise<ImportResult> => {
     const data = JSON.parse(payload);
@@ -111,11 +171,16 @@ export default function Ledgerly() {
   }, [importCSV, settings, saveSettings]);
 
   const wipeAll = useCallback(async () => {
-    const keys = listKeys("ledgerly:");
-    for (const k of keys) { deleteK(k); }
-    const ns = { ...defSettings(), freshStart: true, driveResetAt: isoNow() };
-    setTransactions([]); setTags([]); setRules([]); setDocuments([]);
-    setSettings(ns); saveK("ledgerly:settings", ns); showToast("All data erased");
+    try {
+      await db.wipeAllData();
+      const ns = { ...defSettings(), freshStart: true, driveResetAt: isoNow() };
+      setTransactions([]); setTags([]); setRules([]); setDocuments([]);
+      setSettings(ns);
+      showToast("All data erased");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to erase data", "error");
+    }
   }, [showToast]);
 
   const detectedRecurring = useMemo<DetectedPattern[]>(() => {
@@ -169,6 +234,24 @@ export default function Ledgerly() {
     return cands;
   }, [transactions, settings]);
 
+  if (authLoading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0D1117" }}>
+        <p style={{ color: "#8B949E", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginScreen />;
+
+  if (!dataLoaded) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: t.bg }}>
+        <p style={{ color: t.textTer, fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" }}>Loading your data...</p>
+      </div>
+    );
+  }
+
   const pp = {
     transactions, settings, tags, rules, documents, period, filteredByPeriod,
     income, spending, savingsRate, detectedRecurring,
@@ -186,9 +269,14 @@ export default function Ledgerly() {
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: t.violet, letterSpacing: "-0.5px" }}>Ledgerly</h1>
               <p style={{ margin: "2px 0 0", fontSize: 12, color: t.textQuat }}>Personal Finance</p>
             </div>
-            <button onClick={toggleDark} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }} aria-label="Toggle theme">
-              {dark ? <Sun size={18} color={t.textTer} /> : <Moon size={18} color={t.textTer} />}
-            </button>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button onClick={toggleDark} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }} aria-label="Toggle theme">
+                {dark ? <Sun size={18} color={t.textTer} /> : <Moon size={18} color={t.textTer} />}
+              </button>
+              <button onClick={signOut} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }} aria-label="Sign out" title="Sign out">
+                <LogOut size={18} color={t.textTer} />
+              </button>
+            </div>
           </div>
           {TABS.map((tb) => (
             <button key={tb.id} onClick={() => setTab(tb.id)} style={{
