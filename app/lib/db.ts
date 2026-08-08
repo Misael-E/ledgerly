@@ -4,6 +4,12 @@ import { defSettings } from "./storage";
 
 const supabase = () => createClient();
 
+async function getUserId() {
+  const { data: { user } } = await supabase().auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  return user.id;
+}
+
 // --- Transactions ---
 
 export async function fetchTransactions(): Promise<Transaction[]> {
@@ -16,9 +22,10 @@ export async function fetchTransactions(): Promise<Transaction[]> {
 }
 
 export async function insertTransaction(tx: Transaction): Promise<Transaction> {
+  const userId = await getUserId();
   const { data, error } = await supabase()
     .from("transactions")
-    .insert(transactionToRow(tx))
+    .insert({ ...transactionToRow(tx), user_id: userId })
     .select()
     .single();
   if (error) throw error;
@@ -40,9 +47,10 @@ export async function deleteTransaction(id: string): Promise<void> {
 
 export async function upsertTransactions(txs: Transaction[]): Promise<void> {
   if (txs.length === 0) return;
+  const userId = await getUserId();
   const { error } = await supabase()
     .from("transactions")
-    .upsert(txs.map(transactionToRow), { onConflict: "id" });
+    .upsert(txs.map((tx) => ({ ...transactionToRow(tx), user_id: userId })), { onConflict: "id" });
   if (error) throw error;
 }
 

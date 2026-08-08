@@ -92,7 +92,7 @@ export default function ImportModal({ open, onClose, settings, saveSettings, onI
           const raw = parseFloat(r[mapping.amount]?.replace(/[",$ ]/g, ""));
           if (isNaN(raw)) return null;
           amt = Math.abs(raw);
-          tp = raw < 0 ? "expense" : "income";
+          tp = raw > 0 ? "expense" : "income";
         } else if (mapping.debit !== undefined || mapping.credit !== undefined) {
           const db = mapping.debit !== undefined ? parseFloat(r[mapping.debit]?.replace(/[",$ ]/g, "") || "0") : 0;
           const cr = mapping.credit !== undefined ? parseFloat(r[mapping.credit]?.replace(/[",$ ]/g, "") || "0") : 0;
