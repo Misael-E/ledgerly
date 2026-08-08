@@ -28,6 +28,7 @@ export default function TransactionsPage({ transactions, settings, period, setPe
   const [editTag, setEditTag] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCat, setBulkCat] = useState("");
+  const [bulkTag, setBulkTag] = useState("");
 
   const allBanks = useMemo(() =>
     [...new Set([...(settings.banks || []), ...transactions.map((tx) => tx.bank).filter(Boolean)])],
@@ -80,6 +81,19 @@ export default function TransactionsPage({ transactions, settings, period, setPe
     setSelected(new Set());
     setBulkCat("");
   };
+  const applyBulkTag = async () => {
+    if (!bulkTag || selected.size === 0) return;
+    let count = 0;
+    await saveTx(transactions.map((tx) => {
+      if (!selected.has(tx.id)) return tx;
+      if (tx.tags?.includes(bulkTag)) return tx;
+      count++;
+      return { ...tx, tags: [...(tx.tags || []), bulkTag] };
+    }));
+    showToast(`Tagged ${count} transactions`);
+    setSelected(new Set());
+    setBulkTag("");
+  };
 
   return (
     <div>
@@ -117,6 +131,17 @@ export default function TransactionsPage({ transactions, settings, period, setPe
               style={{ padding: "4px 10px", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, background: bulkCat ? t.violet : t.inputBorder, color: "#fff", cursor: bulkCat ? "pointer" : "default" }}>
               Apply
             </button>
+            <span style={{ width: 1, height: 16, background: t.cardBorder, margin: "0 4px" }} />
+            <select value={bulkTag} onChange={(e) => setBulkTag(e.target.value)}
+              style={{ padding: "4px 8px", border: `1px solid ${t.inputBorder}`, borderRadius: 6, fontSize: 12, background: t.selectBg, color: t.text }}>
+              <option value="">Add tag...</option>
+              {tags.map((tg) => <option key={tg.name} value={tg.name}>{tg.name}</option>)}
+            </select>
+            <button onClick={applyBulkTag} disabled={!bulkTag}
+              style={{ padding: "4px 10px", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, background: bulkTag ? t.violet : t.inputBorder, color: "#fff", cursor: bulkTag ? "pointer" : "default" }}>
+              Tag
+            </button>
+            <span style={{ width: 1, height: 16, background: t.cardBorder, margin: "0 4px" }} />
             <button onClick={() => setSelected(new Set())} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
               <X size={14} color={t.textQuat} />
             </button>
