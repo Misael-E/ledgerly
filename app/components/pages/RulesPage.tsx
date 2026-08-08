@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Edit3, Trash2, Zap, Tag, X, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Edit3, Trash2, Zap, Tag, X, ToggleLeft, ToggleRight, RefreshCw } from "lucide-react";
 import { Card, Btn, EmptyState } from "@/app/components/ui";
 import { useTheme } from "@/app/components/ThemeProvider";
 import RuleModal from "@/app/components/modals/RuleModal";
 import SimpleNameModal from "@/app/components/modals/SimpleNameModal";
-import { uuid, isoNow } from "@/app/lib/helpers";
+import { uuid, isoNow, normMerch } from "@/app/lib/helpers";
 import type { Rule, TagItem, Transaction, Settings } from "@/app/lib/types";
 
 interface Props {
@@ -15,11 +15,12 @@ interface Props {
   tags: TagItem[];
   saveTags: (tags: TagItem[]) => Promise<void>;
   transactions: Transaction[];
+  saveTx: (txs: Transaction[]) => Promise<void>;
   showToast: (msg: string, type?: "success" | "error") => void;
   settings: Settings;
 }
 
-export default function RulesPage({ rules, saveRules, tags, saveTags, transactions, showToast, settings }: Props) {
+export default function RulesPage({ rules, saveRules, tags, saveTags, transactions, saveTx, showToast, settings }: Props) {
   const { t } = useTheme();
   const [addR, setAddR] = useState(false);
   const [addT, setAddT] = useState(false);
@@ -37,13 +38,34 @@ export default function RulesPage({ rules, saveRules, tags, saveTags, transactio
   };
   const rmTag = async (name: string) => { await saveTags(tags.filter((tg) => tg.name !== name)); showToast("Removed"); };
 
+  const reapplyRules = async () => {
+    const enabled = rules.filter((r) => r.enabled);
+    if (enabled.length === 0) { showToast("No enabled rules", "error"); return; }
+    let count = 0;
+    const updated = transactions.map((tx) => {
+      for (const r of enabled) {
+        if (normMerch(tx.merchant).includes(normMerch(r.whenText)) && tx.category !== r.thenText) {
+          count++;
+          return { ...tx, category: r.thenText };
+        }
+      }
+      return tx;
+    });
+    if (count === 0) { showToast("No transactions matched"); return; }
+    await saveTx(updated);
+    showToast(`Re-categorized ${count} transactions`);
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: t.text }}>Categorization Rules</h3>
-        <Btn small onClick={() => setAddR(true)}><Plus size={14} />Create rule</Btn>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn small variant="secondary" onClick={reapplyRules}><RefreshCw size={14} />Re-apply to all</Btn>
+          <Btn small onClick={() => setAddR(true)}><Plus size={14} />Create rule</Btn>
+        </div>
       </div>
-      <p style={{ fontSize: 13, color: t.textTer, margin: "0 0 12px" }}>Rules auto-categorize new imports when the merchant matches.</p>
+      <p style={{ fontSize: 13, color: t.textTer, margin: "0 0 12px" }}>Rules auto-categorize new imports when the merchant matches. Use &quot;Re-apply to all&quot; to bulk-categorize existing transactions.</p>
 
       {rules.length === 0
         ? <EmptyState icon={Zap} title="No rules" desc="Create a rule to auto-categorize." />

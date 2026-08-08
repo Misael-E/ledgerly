@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ArrowLeftRight, Search, Trash2, X } from "lucide-react";
+import { ArrowLeftRight, Search, Trash2, X, CheckSquare, Square } from "lucide-react";
 import { PeriodSelector, EmptyState } from "@/app/components/ui";
 import { useTheme } from "@/app/components/ThemeProvider";
 import TagModal from "@/app/components/modals/TagModal";
@@ -26,6 +26,8 @@ export default function TransactionsPage({ transactions, settings, period, setPe
   const [acctF, setAcctF] = useState("all");
   const [catF, setCatF] = useState("all");
   const [editTag, setEditTag] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCat, setBulkCat] = useState("");
 
   const allBanks = useMemo(() =>
     [...new Set([...(settings.banks || []), ...transactions.map((tx) => tx.bank).filter(Boolean)])],
@@ -60,6 +62,25 @@ export default function TransactionsPage({ transactions, settings, period, setPe
     showToast("Deleted");
   };
 
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const selectAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map((tx) => tx.id)));
+  };
+  const applyBulkCategory = async () => {
+    if (!bulkCat || selected.size === 0) return;
+    await saveTx(transactions.map((tx) => selected.has(tx.id) ? { ...tx, category: bulkCat } : tx));
+    showToast(`Updated ${selected.size} transactions`);
+    setSelected(new Set());
+    setBulkCat("");
+  };
+
   return (
     <div>
       <div style={{ marginBottom: 12 }}><PeriodSelector value={period} onChange={setPeriod} /></div>
@@ -80,17 +101,43 @@ export default function TransactionsPage({ transactions, settings, period, setPe
         </select>
       </div>
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 12, fontSize: 13, color: t.textSec }}>
+      <div style={{ display: "flex", gap: 16, marginBottom: 12, fontSize: 13, color: t.textSec, alignItems: "center", flexWrap: "wrap" }}>
         <span><strong>{filtered.length}</strong> transactions</span>
         <span style={{ color: t.green }}>Income: <strong>{fmt(fI)}</strong></span>
         <span style={{ color: t.orange }}>Spending: <strong>{fmt(fS)}</strong></span>
+        {selected.size > 0 && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto", padding: "4px 10px", background: t.violetBg, borderRadius: 8 }}>
+            <span style={{ fontSize: 13, color: t.violet, fontWeight: 500 }}>{selected.size} selected</span>
+            <select value={bulkCat} onChange={(e) => setBulkCat(e.target.value)}
+              style={{ padding: "4px 8px", border: `1px solid ${t.inputBorder}`, borderRadius: 6, fontSize: 12, background: t.selectBg, color: t.text }}>
+              <option value="">Set category...</option>
+              {(settings.categories || []).map((c) => <option key={c}>{c}</option>)}
+            </select>
+            <button onClick={applyBulkCategory} disabled={!bulkCat}
+              style={{ padding: "4px 10px", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, background: bulkCat ? t.violet : t.inputBorder, color: "#fff", cursor: bulkCat ? "pointer" : "default" }}>
+              Apply
+            </button>
+            <button onClick={() => setSelected(new Set())} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+              <X size={14} color={t.textQuat} />
+            </button>
+          </div>
+        )}
       </div>
 
       {filtered.length === 0
         ? <EmptyState icon={ArrowLeftRight} title="No transactions" desc="Add a transaction or import a CSV to get started." />
         : <div style={{ border: `1px solid ${t.cardBorder}`, borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: t.rowAlt, borderBottom: `1px solid ${t.cardBorder}`, cursor: "pointer" }} onClick={selectAll}>
+              {selected.size === filtered.length && filtered.length > 0
+                ? <CheckSquare size={16} color={t.violet} />
+                : <Square size={16} color={t.textQuat} />}
+              <span style={{ fontSize: 12, color: t.textTer }}>Select all</span>
+            </div>
             {filtered.map((tx, i) => (
-              <div key={tx.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "10px 14px", background: i % 2 === 0 ? t.card : t.rowAlt, borderBottom: `1px solid ${t.cardBorder}` }}>
+              <div key={tx.id} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: "10px 14px", background: selected.has(tx.id) ? t.violetBg : (i % 2 === 0 ? t.card : t.rowAlt), borderBottom: `1px solid ${t.cardBorder}` }}>
+                <button onClick={() => toggleSelect(tx.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  {selected.has(tx.id) ? <CheckSquare size={16} color={t.violet} /> : <Square size={16} color={t.textQuat} />}
+                </button>
                 <div style={{ flex: "1 1 180px", minWidth: 120 }}>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: t.text }}>{tx.merchant}</p>
                   <p style={{ margin: 0, fontSize: 12, color: t.textQuat }}>{tx.date} · {tx.account} · {tx.bank}</p>

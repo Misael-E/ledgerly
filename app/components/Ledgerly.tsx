@@ -73,7 +73,21 @@ export default function Ledgerly() {
     const nd = !dark; setDark(nd); saveK("ledgerly:darkmode", nd);
   }, [dark]);
 
-  const saveTx = useCallback(async (tx: Transaction[]) => { setTransactions(tx); }, []);
+  const saveTx = useCallback(async (newTxs: Transaction[]) => {
+    const prev = transactions;
+    setTransactions(newTxs);
+    try {
+      const deleted = prev.filter((p) => !newTxs.some((n) => n.id === p.id));
+      for (const d of deleted) await db.deleteTransaction(d.id);
+      const changed = newTxs.filter((n) => {
+        const old = prev.find((p) => p.id === n.id);
+        return old && JSON.stringify(old) !== JSON.stringify(n);
+      });
+      if (changed.length > 0) await db.upsertTransactions(changed);
+    } catch (e) {
+      console.error("Failed to sync transactions:", e);
+    }
+  }, [transactions]);
   const saveTags = useCallback(async (tg: TagItem[]) => {
     setTags(tg);
     try { await db.saveTags(tg); } catch (e) { console.error(e); }

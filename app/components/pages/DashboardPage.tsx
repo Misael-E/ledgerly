@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { TrendingUp, Target, AlertCircle, Repeat } from "lucide-react";
 import { Card, PeriodSelector, EmptyState } from "@/app/components/ui";
@@ -22,29 +22,45 @@ interface Props {
   setTab: (tab: string) => void;
 }
 
-export default function DashboardPage({ settings, period, setPeriod, filteredByPeriod, income, spending, savingsRate, detectedRecurring, setTab }: Props) {
+export default function DashboardPage({ settings, period, setPeriod, filteredByPeriod, income, spending, savingsRate, transactions, detectedRecurring, setTab }: Props) {
   const { t } = useTheme();
+  const [bankF, setBankF] = useState("all");
+
+  const allBanks = useMemo(() =>
+    [...new Set(transactions.map((tx) => tx.bank).filter(Boolean))],
+    [transactions]
+  );
+
+  const filtered = useMemo(() =>
+    bankF === "all" ? filteredByPeriod : filteredByPeriod.filter((tx) => tx.bank === bankF),
+    [filteredByPeriod, bankF]
+  );
+
+  const filteredIncome = useMemo(() => filtered.filter((tx) => tx.type === "income").reduce((s, tx) => s + tx.amount, 0), [filtered]);
+  const filteredSpending = useMemo(() => filtered.filter((tx) => tx.type === "expense").reduce((s, tx) => s + tx.amount, 0), [filtered]);
+  const filteredSavingsRate = filteredIncome > 0 ? ((filteredIncome - filteredSpending) / filteredIncome) * 100 : 0;
+
   const nw = settings.netWorthConfigured ? settings.assets - settings.liabilities : null;
-  const needsReview = filteredByPeriod.filter((tx) => tx.category === "Needs review").length;
+  const needsReview = filtered.filter((tx) => tx.category === "Needs review").length;
 
   const chartData = useMemo(() => {
     const mo: Record<string, { month: string; Income: number; Expenses: number }> = {};
-    filteredByPeriod.forEach((tx) => {
+    filtered.forEach((tx) => {
       const m = tx.date.slice(0, 7);
       if (!mo[m]) mo[m] = { month: m, Income: 0, Expenses: 0 };
       if (tx.type === "income") mo[m].Income += tx.amount;
       else mo[m].Expenses += tx.amount;
     });
     return Object.values(mo).sort((a, b) => a.month.localeCompare(b.month)).slice(-7);
-  }, [filteredByPeriod]);
+  }, [filtered]);
 
   const catData = useMemo(() => {
     const c: Record<string, number> = {};
-    filteredByPeriod.filter((tx) => tx.type === "expense").forEach((tx) => {
+    filtered.filter((tx) => tx.type === "expense").forEach((tx) => {
       c[tx.category] = (c[tx.category] || 0) + tx.amount;
     });
     return Object.entries(c).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [filteredByPeriod]);
+  }, [filtered]);
 
   const upcoming = useMemo(() =>
     [...(settings.recurring || []), ...(settings.subscriptions || [])]
@@ -56,7 +72,14 @@ export default function DashboardPage({ settings, period, setPeriod, filteredByP
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}><PeriodSelector value={period} onChange={setPeriod} /></div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+        <PeriodSelector value={period} onChange={setPeriod} />
+        <select value={bankF} onChange={(e) => setBankF(e.target.value)}
+          style={{ padding: "8px 12px", border: `1px solid ${t.inputBorder}`, borderRadius: 8, fontSize: 13, background: t.selectBg, color: t.text }}>
+          <option value="all">All banks</option>
+          {allBanks.map((b) => <option key={b}>{b}</option>)}
+        </select>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12, marginBottom: 20 }}>
         <Card>
           <p style={{ fontSize: 12, color: t.textTer, margin: 0 }}>Net Worth</p>
@@ -70,18 +93,18 @@ export default function DashboardPage({ settings, period, setPeriod, filteredByP
         </Card>
         <Card>
           <p style={{ fontSize: 12, color: t.textTer, margin: 0 }}>Income</p>
-          <p style={{ fontSize: 24, fontWeight: 700, color: t.green, margin: "4px 0" }}>{fmt(income)}</p>
-          <p style={{ fontSize: 11, color: t.textQuat, margin: "4px 0 0" }}>{filteredByPeriod.filter((tx) => tx.type === "income").length} transactions</p>
+          <p style={{ fontSize: 24, fontWeight: 700, color: t.green, margin: "4px 0" }}>{fmt(filteredIncome)}</p>
+          <p style={{ fontSize: 11, color: t.textQuat, margin: "4px 0 0" }}>{filtered.filter((tx) => tx.type === "income").length} transactions</p>
         </Card>
         <Card>
           <p style={{ fontSize: 12, color: t.textTer, margin: 0 }}>Spending</p>
-          <p style={{ fontSize: 24, fontWeight: 700, color: t.orange, margin: "4px 0" }}>{fmt(spending)}</p>
-          <p style={{ fontSize: 11, color: t.textQuat, margin: "4px 0 0" }}>{filteredByPeriod.filter((tx) => tx.type === "expense").length} transactions</p>
+          <p style={{ fontSize: 24, fontWeight: 700, color: t.orange, margin: "4px 0" }}>{fmt(filteredSpending)}</p>
+          <p style={{ fontSize: 11, color: t.textQuat, margin: "4px 0 0" }}>{filtered.filter((tx) => tx.type === "expense").length} transactions</p>
         </Card>
         <Card>
           <p style={{ fontSize: 12, color: t.textTer, margin: 0 }}>Savings Rate</p>
-          <p style={{ fontSize: 24, fontWeight: 700, color: savingsRate >= 0 ? t.green : t.red, margin: "4px 0" }}>{fmtPct(savingsRate)}</p>
-          <p style={{ fontSize: 11, color: t.textQuat, margin: "4px 0 0" }}>{income > 0 ? "(Income − Spending) / Income" : "No trend yet"}</p>
+          <p style={{ fontSize: 24, fontWeight: 700, color: filteredSavingsRate >= 0 ? t.green : t.red, margin: "4px 0" }}>{fmtPct(filteredSavingsRate)}</p>
+          <p style={{ fontSize: 11, color: t.textQuat, margin: "4px 0 0" }}>{filteredIncome > 0 ? "(Income − Spending) / Income" : "No trend yet"}</p>
         </Card>
       </div>
 
@@ -125,9 +148,9 @@ export default function DashboardPage({ settings, period, setPeriod, filteredByP
 
         <Card>
           <h3 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 600, color: t.text }}>Recent Activity</h3>
-          {filteredByPeriod.length === 0
+          {filtered.length === 0
             ? <p style={{ fontSize: 14, color: t.textQuat }}>No transactions in this period.</p>
-            : filteredByPeriod.slice(0, 5).map((tx) => (
+            : filtered.slice(0, 5).map((tx) => (
                 <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${t.cardBorder}` }}>
                   <div>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: t.text }}>{tx.merchant}</p>
