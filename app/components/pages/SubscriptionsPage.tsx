@@ -47,8 +47,14 @@ export default function SubscriptionsPage({ transactions, settings, saveSettings
       }
     }
     for (const g of Object.values(grouped)) g.avgAmount = g.total / g.count;
-    return Object.values(grouped).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
-  }, [transactions]);
+    const confirmedNames = subs.map((s) => normalize(s.name));
+    return Object.values(grouped)
+      .filter((g) => {
+        const norm = normalize(g.merchant);
+        return !confirmedNames.some((cn) => norm.startsWith(cn) || cn.startsWith(norm));
+      })
+      .sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  }, [transactions, subs]);
 
   const subTxTotal = subTxByMerchant.reduce((s, g) => s + g.avgAmount, 0);
 
