@@ -26,9 +26,18 @@ export default function SubscriptionsPage({ transactions, settings, saveSettings
 
   const subTxByMerchant = useMemo(() => {
     const txs = transactions.filter((tx) => tx.category === "Subscriptions");
+    const normalize = (m: string) => m.toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/\s+/g, " ").trim();
     const grouped: Record<string, { merchant: string; total: number; count: number; lastDate: string; avgAmount: number }> = {};
+    const findKey = (norm: string) => {
+      for (const k of Object.keys(grouped)) {
+        if (norm.startsWith(k) || k.startsWith(norm)) return k;
+      }
+      return null;
+    };
     for (const tx of txs) {
-      const key = tx.merchant.toLowerCase();
+      const norm = normalize(tx.merchant);
+      const existing = findKey(norm);
+      const key = existing ?? norm;
       if (!grouped[key]) grouped[key] = { merchant: tx.merchant, total: 0, count: 0, lastDate: tx.date, avgAmount: 0 };
       grouped[key].total += tx.amount;
       grouped[key].count++;
