@@ -62,6 +62,7 @@ export interface Budget {
   id: string;
   category: string;
   limit: number;
+  percent?: number;
   active: boolean;
 }
 
@@ -77,6 +78,7 @@ export interface Settings {
   banks: string[];
   goals: Goal[];
   budgets: Budget[];
+  monthlyIncome?: number;
   subscriptions: RecurringItem[];
   recurring: RecurringItem[];
   dismissedPatterns: string[];
