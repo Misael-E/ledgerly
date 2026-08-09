@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Trash2, Target, Edit3, DollarSign, PieChart } from "lucide-react";
+import { Plus, Trash2, Target, Edit3, DollarSign, PieChart, Eye, EyeOff } from "lucide-react";
 import { Card, Btn, Modal, Select, Input, EmptyState, ProgressBar } from "@/app/components/ui";
 import { useTheme } from "@/app/components/ThemeProvider";
 import { uuid, fmt, fmtPct } from "@/app/lib/helpers";
@@ -64,6 +64,9 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
   const [addMode, setAddMode] = useState<"percent" | "fixed">("percent");
   const [addPct, setAddPct] = useState("");
   const [addLim, setAddLim] = useState("");
+  const [hideAmounts, setHideAmounts] = useState(false);
+
+  const mask = (v: string) => hideAmounts ? "••••••" : v;
 
   const budgets = settings.budgets || [];
   const monthlyIncome = settings.monthlyIncome || 0;
@@ -154,10 +157,13 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <DollarSign size={18} color={t.green} />
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: t.text }}>Monthly Income</h3>
+              <button onClick={() => setHideAmounts(!hideAmounts)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }} title={hideAmounts ? "Show amounts" : "Hide amounts"}>
+                {hideAmounts ? <EyeOff size={16} color={t.textQuat} /> : <Eye size={16} color={t.textQuat} />}
+              </button>
             </div>
             {effectiveIncome > 0 ? (
               <div style={{ marginTop: 6 }}>
-                <span style={{ fontSize: 28, fontWeight: 700, color: t.green }}>{fmt(effectiveIncome)}</span>
+                <span style={{ fontSize: 28, fontWeight: 700, color: t.green }}>{mask(fmt(effectiveIncome))}</span>
                 {!monthlyIncome && detectedIncome > 0 && (
                   <span style={{ fontSize: 12, color: t.textQuat, marginLeft: 8 }}>auto-detected from transactions</span>
                 )}
@@ -192,7 +198,7 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
             )}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-            <span style={{ color: t.textSec }}>Allocated: <strong>{fmtPct(totalAllocatedPct)}</strong> ({fmt(totalLimit)})</span>
+            <span style={{ color: t.textSec }}>Allocated: <strong>{fmtPct(totalAllocatedPct)}</strong> ({mask(fmt(totalLimit))})</span>
             <span style={{ color: unallocatedPct > 0 ? t.green : unallocatedPct === 0 ? t.textQuat : t.red }}>
               {unallocatedPct > 0 ? `${fmtPct(unallocatedPct)} unallocated` : unallocatedPct === 0 ? "Fully allocated" : `${fmtPct(Math.abs(unallocatedPct))} over-allocated`}
             </span>
@@ -205,13 +211,13 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
         <Card style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: t.text }}>This Month</h3>
-            <span style={{ fontSize: 13, color: t.textSec }}>{fmt(totalSpent)} of {fmt(totalLimit)}</span>
+            <span style={{ fontSize: 13, color: t.textSec }}>{mask(fmt(totalSpent))} of {mask(fmt(totalLimit))}</span>
           </div>
           <ProgressBar value={totalSpent} max={totalLimit} color={totalSpent > totalLimit ? t.red : t.green} height={12} />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 12 }}>
             <span style={{ color: t.textQuat }}>{fmtPct(totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0)} used</span>
             <span style={{ color: totalSpent > totalLimit ? t.red : t.green, fontWeight: 600 }}>
-              {totalSpent > totalLimit ? `Over by ${fmt(totalSpent - totalLimit)}` : `${fmt(totalLimit - totalSpent)} remaining`}
+              {totalSpent > totalLimit ? `Over by ${mask(fmt(totalSpent - totalLimit))}` : `${mask(fmt(totalLimit - totalSpent))} remaining`}
             </span>
           </div>
         </Card>
@@ -263,7 +269,7 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
                       <Btn small variant="secondary" onClick={() => setEditId(null)}>Cancel</Btn>
                     </div>
                     {editPct && effectiveIncome > 0 && (
-                      <p style={{ margin: "6px 0 0", fontSize: 12, color: t.textQuat }}>{editPct}% of {fmt(effectiveIncome)} = {fmt((parseFloat(editPct) / 100) * effectiveIncome)}</p>
+                      <p style={{ margin: "6px 0 0", fontSize: 12, color: t.textQuat }}>{editPct}% of {mask(fmt(effectiveIncome))} = {mask(fmt((parseFloat(editPct) / 100) * effectiveIncome))}</p>
                     )}
                   </div>
                 ) : (
@@ -280,10 +286,10 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
                     </div>
                     <ProgressBar value={sp} max={limit} color={ov ? t.red : barColor} />
                     <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 12, color: t.textSec }}>
-                      <span>{fmt(sp)} spent</span><span>{fmt(limit)} limit</span>
+                      <span>{mask(fmt(sp))} spent</span><span>{mask(fmt(limit))} limit</span>
                     </div>
                     <p style={{ margin: "4px 0 0", fontSize: 12, color: ov ? t.red : t.green, fontWeight: 600 }}>
-                      {ov ? `Over by ${fmt(Math.abs(rem))}` : `${fmt(rem)} remaining`}
+                      {ov ? `Over by ${mask(fmt(Math.abs(rem)))}` : `${mask(fmt(rem))} remaining`}
                     </p>
                   </>
                 )}
@@ -311,7 +317,7 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
         {addMode === "percent" && effectiveIncome > 0 ? (
           <>
             <Input label="Percentage of income" value={addPct} onChange={(v) => { setAddPct(v); if (v) setAddLim(String(Math.round((parseFloat(v) / 100) * effectiveIncome * 100) / 100)); }} type="number" placeholder="e.g. 10" />
-            {addPct && <p style={{ fontSize: 12, color: t.textQuat, margin: "4px 0" }}>{addPct}% of {fmt(effectiveIncome)} = <strong>{fmt((parseFloat(addPct) / 100) * effectiveIncome)}</strong></p>}
+            {addPct && <p style={{ fontSize: 12, color: t.textQuat, margin: "4px 0" }}>{addPct}% of {mask(fmt(effectiveIncome))} = <strong>{mask(fmt((parseFloat(addPct) / 100) * effectiveIncome))}</strong></p>}
           </>
         ) : (
           <Input label="Monthly Limit" value={addLim} onChange={setAddLim} type="number" placeholder="0.00" />
@@ -344,7 +350,7 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
 
       {/* Template modal */}
       <Modal open={presetM} onClose={() => setPresetM(false)} title="Budget Templates">
-        <p style={{ fontSize: 12, color: t.textQuat, margin: "0 0 12px" }}>Based on your income of <strong>{fmt(effectiveIncome)}</strong>. This will replace your current budgets.</p>
+        <p style={{ fontSize: 12, color: t.textQuat, margin: "0 0 12px" }}>Based on your income of <strong>{mask(fmt(effectiveIncome))}</strong>. This will replace your current budgets.</p>
         {PRESETS.map((p) => (
           <Card key={p.name} style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => applyPreset(p)}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -357,7 +363,7 @@ export default function BudgetsPage({ settings, saveSettings, transactions, show
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
               {p.items.filter((item) => (settings.categories || []).includes(item.category)).map((item) => (
                 <span key={item.category} style={{ fontSize: 11, padding: "2px 8px", background: t.rowAlt, borderRadius: 4, color: t.textSec }}>
-                  {item.category} {item.percent}% ({fmt((item.percent / 100) * effectiveIncome)})
+                  {item.category} {item.percent}% ({mask(fmt((item.percent / 100) * effectiveIncome))})
                 </span>
               ))}
             </div>
