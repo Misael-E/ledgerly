@@ -17,7 +17,7 @@ interface Props {
 function BudgetForm({ categories, onSave, existingCats }: { categories: string[]; onSave: (b: Budget) => Promise<void>; existingCats: string[] }) {
   const [cat, setCat] = useState("");
   const [lim, setLim] = useState("");
-  const avail = categories.filter((c) => !existingCats.includes(c) && c !== "Income" && c !== "Needs review");
+  const avail = categories.filter((c) => !existingCats.includes(c) && c !== "Income" && c !== "Needs review" && c !== "Transfer");
   return (
     <>
       <Select label="Category" value={cat} onChange={setCat} options={avail} placeholder="Select category" />

@@ -52,8 +52,8 @@ export default function TransactionsPage({ transactions, settings, period, setPe
     return true;
   }), [transactions, period, bankF, acctF, catF, search]);
 
-  const fI = filtered.filter((tx) => tx.type === "income").reduce((s, tx) => s + tx.amount, 0);
-  const fS = filtered.filter((tx) => tx.type === "expense").reduce((s, tx) => s + tx.amount, 0);
+  const fI = filtered.filter((tx) => tx.type === "income" && tx.category !== "Transfer").reduce((s, tx) => s + tx.amount, 0);
+  const fS = filtered.filter((tx) => tx.type === "expense" && tx.category !== "Transfer").reduce((s, tx) => s + tx.amount, 0);
 
   const updateTx = async (id: string, upd: Partial<Transaction>) => {
     await saveTx(transactions.map((tx) => tx.id === id ? { ...tx, ...upd } : tx));

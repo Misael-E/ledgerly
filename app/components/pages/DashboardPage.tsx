@@ -36,8 +36,8 @@ export default function DashboardPage({ settings, period, setPeriod, filteredByP
     [filteredByPeriod, bankF]
   );
 
-  const filteredIncome = useMemo(() => filtered.filter((tx) => tx.type === "income").reduce((s, tx) => s + tx.amount, 0), [filtered]);
-  const filteredSpending = useMemo(() => filtered.filter((tx) => tx.type === "expense").reduce((s, tx) => s + tx.amount, 0), [filtered]);
+  const filteredIncome = useMemo(() => filtered.filter((tx) => tx.type === "income" && tx.category !== "Transfer").reduce((s, tx) => s + tx.amount, 0), [filtered]);
+  const filteredSpending = useMemo(() => filtered.filter((tx) => tx.type === "expense" && tx.category !== "Transfer").reduce((s, tx) => s + tx.amount, 0), [filtered]);
   const filteredSavingsRate = filteredIncome > 0 ? ((filteredIncome - filteredSpending) / filteredIncome) * 100 : 0;
 
   const nw = settings.netWorthConfigured ? settings.assets - settings.liabilities : null;
@@ -56,7 +56,7 @@ export default function DashboardPage({ settings, period, setPeriod, filteredByP
 
   const catData = useMemo(() => {
     const c: Record<string, number> = {};
-    filtered.filter((tx) => tx.type === "expense").forEach((tx) => {
+    filtered.filter((tx) => tx.type === "expense" && tx.category !== "Transfer").forEach((tx) => {
       c[tx.category] = (c[tx.category] || 0) + tx.amount;
     });
     return Object.entries(c).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);

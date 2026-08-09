@@ -46,7 +46,7 @@ export const PERIODS = [
 export const DEFAULT_CATEGORIES = [
   "Housing", "Groceries", "Shopping", "Dining", "Transportation",
   "Utilities", "Subscriptions", "Insurance", "Health", "Entertainment",
-  "Income", "Needs review", "Other"
+  "Transfer", "Income", "Needs review", "Other"
 ];
 
 export const DEFAULT_ACCOUNTS = ["Main Checking", "Everyday Visa", "Rewards Card", "Cash"];

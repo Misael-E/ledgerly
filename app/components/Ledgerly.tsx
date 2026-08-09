@@ -113,8 +113,8 @@ export default function Ledgerly() {
   }, [settings, showToast]);
 
   const filteredByPeriod = useMemo(() => transactions.filter((tx) => inPeriod(tx.date, period)), [transactions, period]);
-  const income = useMemo(() => filteredByPeriod.filter((tx) => tx.type === "income").reduce((s, tx) => s + tx.amount, 0), [filteredByPeriod]);
-  const spending = useMemo(() => filteredByPeriod.filter((tx) => tx.type === "expense").reduce((s, tx) => s + tx.amount, 0), [filteredByPeriod]);
+  const income = useMemo(() => filteredByPeriod.filter((tx) => tx.type === "income" && tx.category !== "Transfer").reduce((s, tx) => s + tx.amount, 0), [filteredByPeriod]);
+  const spending = useMemo(() => filteredByPeriod.filter((tx) => tx.type === "expense" && tx.category !== "Transfer").reduce((s, tx) => s + tx.amount, 0), [filteredByPeriod]);
   const savingsRate = income > 0 ? ((income - spending) / income) * 100 : 0;
 
   const addTransaction = useCallback(async (tx: Partial<Transaction>): Promise<boolean> => {
