@@ -145,21 +145,24 @@ export default function ImportModal({ open, onClose, settings, saveSettings, onI
         const bankName = BANK_FORMATS.find((b) => b.value === pdfFormat)?.label || pdfFormat;
         const existing = settings.statementBalances || [];
         const id = `${bankName}-${stmtInfo.statementDate || new Date().toISOString().slice(0, 10)}`;
-        const alreadyExists = existing.some((s) => s.id === id);
-        if (!alreadyExists) {
-          await saveSettings({
-            ...settings,
-            statementBalances: [...existing, {
-              id,
-              bank: bankName,
-              balance: stmtInfo.balance,
-              dueDate: stmtInfo.dueDate,
-              statementDate: stmtInfo.statementDate || new Date().toISOString().slice(0, 10),
-              paid: false,
-              importedAt: new Date().toISOString(),
-            }],
-          });
-        }
+        const prior = existing.find((s) => s.id === id);
+        const entry = {
+          id,
+          bank: bankName,
+          balance: stmtInfo.balance,
+          dueDate: stmtInfo.dueDate,
+          statementDate: stmtInfo.statementDate || new Date().toISOString().slice(0, 10),
+          paid: prior?.paid ?? false, // preserve paid status on re-import
+          importedAt: new Date().toISOString(),
+        };
+        // Upsert by id so re-importing a statement refreshes a stale balance
+        // instead of silently keeping the old (possibly wrong) value.
+        await saveSettings({
+          ...settings,
+          statementBalances: prior
+            ? existing.map((s) => (s.id === id ? entry : s))
+            : [...existing, entry],
+        });
       }
 
       setStep(3);
