@@ -384,7 +384,10 @@ export function extractStatementInfo(pages: string[], bank: BankFormat): Stateme
   let statementDate: string | null = null;
 
   if (bank === "scotiabank") {
-    const balMatch = text.match(/New\s+Balance[^$\d]*([\d,]+\.\d{2})/i);
+    // "New Balance" amount may sit after the label (New Balance = $X) or, in the
+    // summary-box layout, on the line just above the label. Try both.
+    const balMatch = text.match(/New\s+Balance\s*=?\s*\$?([\d,]+\.\d{2})/i)
+      || text.match(/\$?([\d,]+\.\d{2})\s*\n\s*New\s+Balance/i);
     if (balMatch) balance = parseFloat(balMatch[1].replace(/,/g, ""));
     const dueMatch = text.match(/Payment\s+Due\s+Date\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
     if (dueMatch) dueDate = parseDate(dueMatch[1], year);
