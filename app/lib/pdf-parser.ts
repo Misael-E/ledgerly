@@ -370,6 +370,52 @@ export function rowsToTransactions(rows: ParsedRow[], bankName: string): Transac
   });
 }
 
+export interface StatementInfo {
+  balance: number | null;
+  dueDate: string | null;
+  statementDate: string | null;
+}
+
+export function extractStatementInfo(pages: string[], bank: BankFormat): StatementInfo {
+  const text = pages.join("\n");
+  const year = extractYear(pages);
+  let balance: number | null = null;
+  let dueDate: string | null = null;
+  let statementDate: string | null = null;
+
+  if (bank === "scotiabank") {
+    const balMatch = text.match(/New\s+Balance[^$\d]*([\d,]+\.\d{2})/i);
+    if (balMatch) balance = parseFloat(balMatch[1].replace(/,/g, ""));
+    const dueMatch = text.match(/Payment\s+Due\s+Date\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (dueMatch) dueDate = parseDate(dueMatch[1], year);
+    const stmtMatch = text.match(/Statement\s+Date\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (stmtMatch) statementDate = parseDate(stmtMatch[1], year);
+  } else if (bank === "neo") {
+    const balMatch = text.match(/New\s+(?:Balance|Amount\s+Owing)\s*([\d,]+\.\d{2})/i);
+    if (balMatch) balance = parseFloat(balMatch[1].replace(/,/g, ""));
+    const dueMatch = text.match(/Due\s+Date\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (dueMatch) dueDate = parseDate(dueMatch[1], year);
+    const stmtMatch = text.match(/(\w{3,9}\s+\d{1,2},?\s*\d{4})\s*[-–]\s*(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (stmtMatch) statementDate = parseDate(stmtMatch[2], year);
+  } else if (bank === "amex") {
+    const balMatch = text.match(/New\s+Balance\s*\$?([\d,]+\.\d{2})/i)
+      || text.match(/Total\s+Amount\s+Due\s*\$?([\d,]+\.\d{2})/i);
+    if (balMatch) balance = parseFloat(balMatch[1].replace(/,/g, ""));
+    const dueMatch = text.match(/Payment\s+Due\s+Date[:\s]*(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (dueMatch) dueDate = parseDate(dueMatch[1], year);
+    const stmtMatch = text.match(/Statement\s+(?:Date|Closing\s+Date)[:\s]*(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (stmtMatch) statementDate = parseDate(stmtMatch[1], year);
+  } else if (bank === "bmo") {
+    const balMatch = text.match(/Closing\s+balance.*?([\d,]+\.\d{2})/i)
+      || text.match(/balance\s*\(\$\)\s+on.*?([\d,]+\.\d{2})/i);
+    if (balMatch) balance = parseFloat(balMatch[1].replace(/,/g, ""));
+    const stmtMatch = text.match(/period\s+ending\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (stmtMatch) statementDate = parseDate(stmtMatch[1], year);
+  }
+
+  return { balance, dueDate, statementDate };
+}
+
 export function getRawText(pages: string[]): string {
   return pages.join("\n\n--- Page Break ---\n\n");
 }

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, Target, AlertCircle, Repeat, ArrowUpRight, ArrowDownRight, ShoppingBag } from "lucide-react";
+import { TrendingUp, Target, AlertCircle, Repeat, ArrowUpRight, ArrowDownRight, ShoppingBag, CreditCard, CheckCircle } from "lucide-react";
 import { Card, PeriodSelector, EmptyState } from "@/app/components/ui";
 import { useTheme } from "@/app/components/ThemeProvider";
 import { PIE_COLORS } from "@/app/lib/constants";
@@ -11,6 +11,7 @@ import type { Transaction, Settings, DetectedPattern } from "@/app/lib/types";
 
 interface Props {
   settings: Settings;
+  saveSettings: (s: Settings) => Promise<void>;
   period: string;
   setPeriod: (p: string) => Promise<void>;
   filteredByPeriod: Transaction[];
@@ -22,7 +23,7 @@ interface Props {
   setTab: (tab: string) => void;
 }
 
-export default function DashboardPage({ settings, period, setPeriod, filteredByPeriod, income, spending, savingsRate, transactions, detectedRecurring, setTab }: Props) {
+export default function DashboardPage({ settings, saveSettings, period, setPeriod, filteredByPeriod, income, spending, savingsRate, transactions, detectedRecurring, setTab }: Props) {
   const { t } = useTheme();
   const [bankF, setBankF] = useState("all");
   const [showAllActivity, setShowAllActivity] = useState(false);
@@ -118,6 +119,15 @@ export default function DashboardPage({ settings, period, setPeriod, filteredByP
     return expenses.length > 0 ? expenses.reduce((max, tx) => tx.amount > max.amount ? tx : max, expenses[0]) : null;
   }, [filtered]);
 
+  const balances = (settings.statementBalances || []).sort((a, b) => b.statementDate.localeCompare(a.statementDate));
+  const unpaidBalances = balances.filter((b) => !b.paid);
+  const totalOwing = unpaidBalances.reduce((s, b) => s + b.balance, 0);
+
+  const togglePaid = async (id: string) => {
+    const updated = balances.map((b) => b.id === id ? { ...b, paid: !b.paid } : b);
+    await saveSettings({ ...settings, statementBalances: updated });
+  };
+
   return (
     <div>
       <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
@@ -177,6 +187,40 @@ export default function DashboardPage({ settings, period, setPeriod, filteredByP
           </Card>
         )}
       </div>
+
+      {/* Statement Balances */}
+      {balances.length > 0 && (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <CreditCard size={18} color={t.orange} />
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: t.text }}>Statement Balances</h3>
+            </div>
+            {totalOwing > 0 && (
+              <span style={{ fontSize: 14, fontWeight: 700, color: t.red }}>Total owing: {fmt(totalOwing)}</span>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 8 }}>
+            {balances.slice(0, 6).map((b) => (
+              <div key={b.id} style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${b.paid ? t.green + "44" : t.cardBorder}`, background: b.paid ? t.greenBg : t.rowAlt, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: t.text }}>{b.bank}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: t.textQuat }}>
+                    {b.statementDate}{b.dueDate ? ` · Due: ${b.dueDate}` : ""}
+                  </p>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: b.paid ? t.green : t.red }}>{fmt(b.balance)}</span>
+                  <button onClick={() => togglePaid(b.id)} title={b.paid ? "Mark as unpaid" : "Mark as paid"}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                    <CheckCircle size={20} color={b.paid ? t.green : t.textQuat} fill={b.paid ? t.greenBg : "none"} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Charts row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16, marginBottom: 16 }}>

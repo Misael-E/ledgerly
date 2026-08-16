@@ -66,6 +66,16 @@ export interface Budget {
   active: boolean;
 }
 
+export interface StatementBalance {
+  id: string;
+  bank: string;
+  balance: number;
+  dueDate: string | null;
+  statementDate: string;
+  paid: boolean;
+  importedAt: string;
+}
+
 export interface ProcessedFile {
   fileId: string;
   fileName: string;
@@ -92,6 +102,7 @@ export interface Settings {
   lastDriveSync: string | null;
   processedDriveFiles: ProcessedFile[];
   driveResetAt: string | null;
+  statementBalances?: StatementBalance[];
 }
 
 export interface DetectedPattern {

@@ -134,11 +134,34 @@ export default function ImportModal({ open, onClose, settings, saveSettings, onI
     if (!f) return;
     setPdfLoading(true);
     try {
-      const { parsePDF, parseStatementRows, getRawText } = await import("@/app/lib/pdf-parser");
+      const { parsePDF, parseStatementRows, getRawText, extractStatementInfo } = await import("@/app/lib/pdf-parser");
       const pages = await parsePDF(f);
       setPdfRawText(getRawText(pages));
       const parsed = parseStatementRows(pages, pdfFormat);
       setPdfParsed(parsed);
+
+      const stmtInfo = extractStatementInfo(pages, pdfFormat);
+      if (stmtInfo.balance !== null && stmtInfo.balance > 0) {
+        const bankName = BANK_FORMATS.find((b) => b.value === pdfFormat)?.label || pdfFormat;
+        const existing = settings.statementBalances || [];
+        const id = `${bankName}-${stmtInfo.statementDate || new Date().toISOString().slice(0, 10)}`;
+        const alreadyExists = existing.some((s) => s.id === id);
+        if (!alreadyExists) {
+          await saveSettings({
+            ...settings,
+            statementBalances: [...existing, {
+              id,
+              bank: bankName,
+              balance: stmtInfo.balance,
+              dueDate: stmtInfo.dueDate,
+              statementDate: stmtInfo.statementDate || new Date().toISOString().slice(0, 10),
+              paid: false,
+              importedAt: new Date().toISOString(),
+            }],
+          });
+        }
+      }
+
       setStep(3);
     } catch (err) {
       console.error("PDF parse error:", err);
