@@ -8,7 +8,7 @@ interface ParsedRow {
   type: "expense" | "income";
 }
 
-export type BankFormat = "scotiabank" | "bmo" | "amex" | "neo";
+export type BankFormat = "scotiabank" | "bmo" | "amex" | "neo" | "cibc";
 
 export async function parsePDF(file: File): Promise<string[]> {
   const pdfjsLib = await import("pdfjs-dist");
@@ -126,16 +126,51 @@ function parseScotiabank(pages: string[]): ParsedRow[] {
   return rows;
 }
 
-// --- BMO PDF (chequing/banking) ---
-// Format: Date  Description  AmtDeducted  AmtAdded  Balance
-// e.g. "Jun 15  Direct Deposit, RESOLUTIONMD, I PAY/PAY  2,126.31  6,191.11"
-// Deducted amounts appear first, added amounts second, balance last
-// We need to figure out if the first amount is deducted or added based on position/context
-// Key insight: lines have 2-3 amounts at end. Last is always balance.
-// If there are 3 amounts: first=deducted, second=added, third=balance
-// If there are 2 amounts: could be deducted+balance or added+balance
-// We determine by checking if balance went up or down vs the description
+// --- BMO PDF (chequing/banking AND credit card) ---
+// Chequing format: Date  Description  AmtDeducted  AmtAdded  Balance
+// Credit card format: "Mon. DD Mon. DD  MERCHANT LOCATION PROV  AMOUNT [CR]"
+// Detect credit card by presence of abbreviated months with periods (Jun. 18)
 function parseBMO(pages: string[]): ParsedRow[] {
+  const text = pages.join("\n");
+  const isCreditCard = /\w{3}\.\s+\d{1,2}\s+\w{3}\.\s+\d{1,2}\s{2,}/.test(text);
+  return isCreditCard ? parseBMOCreditCard(pages) : parseBMOChequing(pages);
+}
+
+function parseBMOCreditCard(pages: string[]): ParsedRow[] {
+  const rows: ParsedRow[] = [];
+  const year = extractYear(pages);
+  const lines = pages.join("\n").split("\n");
+
+  const skipPatterns = /^(bmo|summary|card\s+number|previous|payment|total|new\s+install|cash\s+advance|fee|minimum|include|your\s|balance|credit\s+limit|available|reward|point|important|interest|we\s|if\s|page\s|get\s|effective)/i;
+
+  for (const line of lines) {
+    if (skipPatterns.test(line.trim())) continue;
+
+    // "Mon. DD Mon. DD  MERCHANT..."  or  "Mon. DD  Mon. DD  MERCHANT..."
+    const match = line.match(/^(\w{3}\.?\s+\d{1,2})\s+(\w{3}\.?\s+\d{1,2})\s{2,}(.+)/);
+    if (!match) continue;
+
+    const date = parseDate(match[1].replace(".", ""), year);
+    if (!date) continue;
+
+    const rest = match[3];
+
+    const amtMatch = rest.match(/([\d,]+\.\d{2})\s*(CR)?\s*$/);
+    if (!amtMatch) continue;
+
+    const amount = parseFloat(amtMatch[1].replace(/,/g, ""));
+    if (amount === 0) continue;
+
+    const isCredit = !!amtMatch[2];
+    const merchant = rest.slice(0, rest.lastIndexOf(amtMatch[0])).replace(/\s{2,}/g, " ").trim();
+    if (!merchant || merchant.length < 2) continue;
+
+    rows.push({ date, merchant, amount, type: isCredit ? "income" : "expense" });
+  }
+  return rows;
+}
+
+function parseBMOChequing(pages: string[]): ParsedRow[] {
   const rows: ParsedRow[] = [];
   const year = extractYear(pages);
   const lines = pages.join("\n").split("\n");
@@ -145,7 +180,6 @@ function parseBMO(pages: string[]): ParsedRow[] {
   for (const line of lines) {
     if (skipPatterns.test(line.trim())) continue;
 
-    // Match: "Mon DD  description  amounts..."
     const dateMatch = line.match(/^(\w{3}\s+\d{1,2})\s{2,}(.+)/i);
     if (!dateMatch) continue;
 
@@ -154,10 +188,8 @@ function parseBMO(pages: string[]): ParsedRow[] {
 
     const rest = dateMatch[2];
 
-    // Skip summary lines
     if (/^(opening\s+balance|closing\s+total)/i.test(rest)) continue;
 
-    // Find all amounts in the line
     const amounts: { value: number; index: number }[] = [];
     const amtRe = /([\d,]+\.\d{2})/g;
     let m;
@@ -165,26 +197,17 @@ function parseBMO(pages: string[]): ParsedRow[] {
       amounts.push({ value: parseFloat(m[1].replace(/,/g, "")), index: m.index });
     }
 
-    // Need at least 2 amounts (transaction amount + balance)
     if (amounts.length < 2) continue;
 
-    // Merchant is everything before the first amount
     const merchant = rest.slice(0, amounts[0].index).replace(/\s{2,}/g, " ").trim();
     if (!merchant || merchant.length < 2) continue;
 
-    // Determine if debit or credit from description keywords
     const isIncome = /deposit|received|added|cancelled|refund/i.test(merchant);
-    const isExpense = /payment|sent|transfer|fee|pre-authorized|scheduled|online\s+transfer/i.test(merchant);
 
-    // The transaction amount is the first amount (or second if there are 3)
-    // Balance is always last
     let txAmount: number;
     let type: "expense" | "income";
 
     if (amounts.length >= 3) {
-      // 3+ amounts: deducted, added, balance — one of first two is the transaction
-      // If first amount matches a deduction pattern, it's expense
-      // The non-zero one before balance is the transaction
       const deducted = amounts[0].value;
       const added = amounts[1].value;
       if (deducted > 0 && added === 0) {
@@ -196,7 +219,6 @@ function parseBMO(pages: string[]): ParsedRow[] {
         type = isIncome ? "income" : "expense";
       }
     } else {
-      // 2 amounts: transaction + balance
       txAmount = amounts[0].value;
       type = isIncome ? "income" : "expense";
     }
@@ -301,6 +323,49 @@ function parseNeo(pages: string[]): ParsedRow[] {
   return rows;
 }
 
+// --- CIBC PDF (credit card) ---
+// Format: "Mon DD  Mon DD  [Ý]  MERCHANT  LOCATION  PROV  [Category]  AMOUNT"
+// Payments are separate lines like "Jun 16  Jun 17  PAYMENT THANK YOU/...  4,676.61"
+function parseCIBC(pages: string[]): ParsedRow[] {
+  const rows: ParsedRow[] = [];
+  const year = extractYear(pages);
+  const lines = pages.join("\n").split("\n");
+
+  const skipPatterns = /^(cibc|marissa|account\s+number|statement\s+date|your\s|previous|contact|customer|lost|tty|online|summary|credit|available|interest|amount\s+due|minimum\s+payment|please|tear\s+off|page\s|\*\d|payment\s+option|institution|mail|money|total|®)/i;
+
+  for (const line of lines) {
+    if (skipPatterns.test(line.trim())) continue;
+
+    const twoDateMatch = line.match(/^(\w{3}\s+\d{1,2})\s{2,}(\w{3}\s+\d{1,2})\s{2,}(.+)/);
+    if (!twoDateMatch) continue;
+
+    const date = parseDate(twoDateMatch[1], year);
+    if (!date) continue;
+
+    let rest = twoDateMatch[3];
+
+    // Strip leading Ý icon character
+    rest = rest.replace(/^[\xDDÝ]\s+/, "");
+
+    const amtMatch = rest.match(/([\d,]+\.\d{2})\s*$/);
+    if (!amtMatch) continue;
+
+    const amount = parseFloat(amtMatch[1].replace(/,/g, ""));
+    if (amount === 0) continue;
+
+    // Merchant is everything before the amount; strip trailing category words
+    let merchant = rest.slice(0, rest.lastIndexOf(amtMatch[0])).replace(/\s{2,}/g, " ").trim();
+    // CIBC appends category labels like "Restaurants", "Retail and Grocery" at the end
+    merchant = merchant.replace(/\s+(Restaurants|Retail and Grocery|Transportation|Health and Education|Home and Office Improvement|Personal and Household Expenses|Entertainment|Travel|Insurance|Government|Other)\s*$/i, "").trim();
+    if (!merchant || merchant.length < 2) continue;
+
+    const isPayment = /payment|thank\s+you|paiement|merci|refund|credit|return/i.test(merchant);
+
+    rows.push({ date, merchant, amount, type: isPayment ? "income" : "expense" });
+  }
+  return rows;
+}
+
 // --- Generic fallback ---
 function parseGeneric(pages: string[]): ParsedRow[] {
   const rows: ParsedRow[] = [];
@@ -341,6 +406,7 @@ const PARSERS: Record<BankFormat, (pages: string[]) => ParsedRow[]> = {
   bmo: parseBMO,
   amex: parseAmex,
   neo: parseNeo,
+  cibc: parseCIBC,
 };
 
 export function parseStatementRows(pages: string[], bank: BankFormat): ParsedRow[] {
@@ -410,11 +476,32 @@ export function extractStatementInfo(pages: string[], bank: BankFormat): Stateme
     const stmtMatch = text.match(/Statement\s+(?:Date|Closing\s+Date)[:\s]*(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
     if (stmtMatch) statementDate = parseDate(stmtMatch[1], year);
   } else if (bank === "bmo") {
-    const balMatch = text.match(/Closing\s+balance.*?([\d,]+\.\d{2})/i)
+    // Credit card: "Balance due  $558.17" or "Total balance  $558.17"
+    // Chequing: "Closing balance ... 1,234.56"
+    const balMatch = text.match(/Balance\s+due\s+\$?([\d,]+\.\d{2})/i)
+      || text.match(/Total\s+balance\s+\$?([\d,]+\.\d{2})/i)
+      || text.match(/Closing\s+balance.*?([\d,]+\.\d{2})/i)
       || text.match(/balance\s*\(\$\)\s+on.*?([\d,]+\.\d{2})/i);
     if (balMatch) balance = parseFloat(balMatch[1].replace(/,/g, ""));
-    const stmtMatch = text.match(/period\s+ending\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    // Credit card: "Statement date  Jul. 16, 2026" (on same line as previous balance)
+    const stmtMatch = text.match(/Statement\s+date\s+(\w{3,9}\.?\s+\d{1,2},?\s*\d{4})/i)
+      || text.match(/period\s+ending\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (stmtMatch) statementDate = parseDate(stmtMatch[1].replace(".", ""), year);
+    // Credit card: "Payment due date: Aug. 6, 2026"
+    const dueMatch = text.match(/Payment\s+due\s+date:?\s+(\w{3,9}\.?\s+\d{1,2},?\s*\d{4})/i);
+    if (dueMatch) dueDate = parseDate(dueMatch[1].replace(".", ""), year);
+  } else if (bank === "cibc") {
+    // "Total balance  =  $2,824.15" or "Amount Due ... $2,824.15"
+    const balMatch = text.match(/Total\s+balance[^\d\n]*([\d,]+\.\d{2})/i)
+      || text.match(/Amount\s+Due[^\d\n]*([\d,]+\.\d{2})/i);
+    if (balMatch) balance = parseFloat(balMatch[1].replace(/,/g, ""));
+    // "Statement Date" on one line, date on the next: "July 12, 2026"
+    const stmtMatch = text.match(/Statement\s+Date\s*\n\s*(\w{3,9}\s+\d{1,2},?\s*\d{4})/i)
+      || text.match(/Statement\s+Date\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
     if (stmtMatch) statementDate = parseDate(stmtMatch[1], year);
+    // "Please pay this amount by  Aug 04, 2026" or "Minimum Payment due by ... Aug 04, 2026"
+    const dueMatch = text.match(/pay\s+(?:this\s+amount|.*?)\s+by\s+(\w{3,9}\s+\d{1,2},?\s*\d{4})/i);
+    if (dueMatch) dueDate = parseDate(dueMatch[1], year);
   }
 
   return { balance, dueDate, statementDate };

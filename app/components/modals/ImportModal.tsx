@@ -21,6 +21,7 @@ const BANK_FORMATS: { value: BankFormat; label: string }[] = [
   { value: "bmo", label: "BMO" },
   { value: "amex", label: "Amex" },
   { value: "neo", label: "Neo Financial" },
+  { value: "cibc", label: "CIBC" },
 ];
 
 export default function ImportModal({ open, onClose, settings, saveSettings, onImport, showToast }: Props) {
