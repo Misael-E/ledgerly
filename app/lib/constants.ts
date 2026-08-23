@@ -44,13 +44,34 @@ export const PERIODS = [
 ];
 
 export const DEFAULT_CATEGORIES = [
-  "Housing", "Groceries", "Shopping", "Dining", "Transportation",
-  "Utilities", "Subscriptions", "Insurance", "Health", "Entertainment",
-  "Transfer", "Income", "Needs review", "Other"
+  "Groceries", "Shopping", "Dining", "Transportation", "Utilities",
+  "Subscriptions", "Insurance", "Health", "Entertainment", "Income",
+  "Needs review", "Other", "Installments", "Savings", "Investments",
+  "Bills", "Loans", "Payment", "Transfer",
 ];
 
-export const DEFAULT_ACCOUNTS = ["Main Checking", "Everyday Visa", "Rewards Card", "Cash"];
-export const DEFAULT_BANKS = ["Bank 1", "Bank 2", "Credit Union"];
+export const DEFAULT_RULES: { whenText: string; thenText: string }[] = [
+  { whenText: "Scheduled Transfer", thenText: "Transfer" },
+  { whenText: "WS INVESTMENTS INV/PLA", thenText: "Investments" },
+  { whenText: "PRIMERICA LIFE INS/ASS", thenText: "Insurance" },
+  { whenText: "INTERAC e-Transfer Received", thenText: "Income" },
+  { whenText: "CLOUDFLARE", thenText: "Subscriptions" },
+  { whenText: "COSTCO GAS", thenText: "Transportation" },
+  { whenText: "PEMBRIDGE", thenText: "Insurance" },
+  { whenText: "Payment Received", thenText: "Transfer" },
+  { whenText: "PAYMENT - THANK YOU", thenText: "Transfer" },
+  { whenText: "Scheduled Payment", thenText: "Transfer" },
+  { whenText: "amazon", thenText: "Shopping" },
+  { whenText: "amzn", thenText: "Shopping" },
+  { whenText: "cineplex", thenText: "Entertainment" },
+  { whenText: "Direct Deposit", thenText: "Income" },
+  { whenText: "microsoft", thenText: "Subscriptions" },
+  { whenText: "anthropic", thenText: "Subscriptions" },
+  { whenText: "afterpay", thenText: "Installments" },
+];
+
+export const DEFAULT_ACCOUNTS = ["Everyday Visa", "Rewards Card", "Mastercard", "Chequing"];
+export const DEFAULT_BANKS = ["Credit Union", "Scotiabank", "BMO", "Neo Financial", "Amex", "CIBC"];
 
 export const TABS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },

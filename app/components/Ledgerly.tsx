@@ -17,7 +17,7 @@ import GoalsPage from "./pages/GoalsPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import RulesPage from "./pages/RulesPage";
 import SettingsPage from "./pages/SettingsPage";
-import { LIGHT, DARK, TABS, SUB_HINTS, BILL_HINTS } from "@/app/lib/constants";
+import { LIGHT, DARK, TABS, SUB_HINTS, BILL_HINTS, DEFAULT_RULES } from "@/app/lib/constants";
 import { loadK, saveK, defSettings } from "@/app/lib/storage";
 import { uuid, fp, isoNow, normMerch, inPeriod } from "@/app/lib/helpers";
 import * as db from "@/app/lib/db";
@@ -54,9 +54,23 @@ export default function Ledgerly() {
         if (cancelled) return;
         setTransactions(txs);
         setTags(tgs);
-        setRules(rls);
         setDocuments(docs);
         setSettings(sett);
+
+        // Seed default rules for new users who have none
+        if (rls.length === 0) {
+          const seeded: Rule[] = DEFAULT_RULES.map((r) => ({
+            id: uuid(),
+            whenText: r.whenText,
+            thenText: r.thenText,
+            enabled: true,
+            createdAt: isoNow(),
+          }));
+          setRules(seeded);
+          db.saveRules(seeded).catch(console.error);
+        } else {
+          setRules(rls);
+        }
       } catch (err) {
         console.error("Failed to load data:", err);
       }
