@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { PieChart, Pie, Cell, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, Target, AlertCircle, Repeat, ArrowUpRight, ArrowDownRight, ShoppingBag, CreditCard, CheckCircle } from "lucide-react";
+import { TrendingUp, Target, AlertCircle, Repeat, ArrowUpRight, ArrowDownRight, ShoppingBag, CreditCard, CheckCircle, Trash2 } from "lucide-react";
 import { Card, PeriodSelector, EmptyState } from "@/app/components/ui";
 import { useTheme } from "@/app/components/ThemeProvider";
 import { PIE_COLORS } from "@/app/lib/constants";
@@ -128,6 +128,11 @@ export default function DashboardPage({ settings, saveSettings, period, setPerio
     await saveSettings({ ...settings, statementBalances: updated });
   };
 
+  const removeBalance = async (id: string) => {
+    const updated = balances.filter((b) => b.id !== id);
+    await saveSettings({ ...settings, statementBalances: updated });
+  };
+
   return (
     <div>
       <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
@@ -209,11 +214,15 @@ export default function DashboardPage({ settings, saveSettings, period, setPerio
                     {b.statementDate}{b.dueDate ? ` · Due: ${b.dueDate}` : ""}
                   </p>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 15, color: b.paid ? t.green : t.red }}>{fmt(b.balance)}</span>
                   <button onClick={() => togglePaid(b.id)} title={b.paid ? "Mark as unpaid" : "Mark as paid"}
                     style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
                     <CheckCircle size={20} color={b.paid ? t.green : t.textQuat} fill={b.paid ? t.greenBg : "none"} />
+                  </button>
+                  <button onClick={() => { if (confirm("Remove this statement balance?")) removeBalance(b.id); }} title="Remove"
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 2, opacity: 0.5 }}>
+                    <Trash2 size={16} color={t.textQuat} />
                   </button>
                 </div>
               </div>
